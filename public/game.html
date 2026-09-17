@@ -1,0 +1,1171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071a3d">
+  <meta name="description" content="Solve quick arithmetic and flap through the correct answer.">
+  <title>SkySum</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23071a3d'/%3E%3Cpath d='M13 34h38M32 15v38' stroke='%23ffd44d' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E">
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #071a3d;
+      --sky: #49c8ff;
+      --blue: #1477ff;
+      --yellow: #ffd44d;
+      --cream: #fff9e7;
+      --white: #ffffff;
+      --red: #ff4f64;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      overflow: hidden;
+      background: var(--ink);
+      font-family: ui-rounded, "Nunito", "Avenir Next", system-ui, sans-serif;
+    }
+
+    body {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      color: var(--white);
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    .shell {
+      width: min(100%, 640px);
+      height: min(920px, calc(100dvh - 32px));
+      min-height: 520px;
+      position: relative;
+      overflow: hidden;
+      border: 3px solid rgba(255,255,255,.88);
+      border-radius: clamp(18px, 4vw, 32px);
+      background: var(--sky);
+      box-shadow: 0 24px 70px rgba(0,0,0,.4), 0 0 0 8px rgba(255,255,255,.08);
+      isolation: isolate;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: pointer;
+    }
+
+    .topbar {
+      position: absolute;
+      z-index: 3;
+      inset: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: max(14px, env(safe-area-inset-top)) 18px 10px;
+      pointer-events: none;
+    }
+
+    .brand {
+      color: var(--ink);
+      font-size: clamp(1.05rem, 3.6vw, 1.4rem);
+      font-weight: 1000;
+      letter-spacing: -.05em;
+      text-transform: uppercase;
+      text-shadow: 0 2px rgba(255,255,255,.32);
+    }
+
+    .brand span { color: var(--cream); }
+
+    .stats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      pointer-events: auto;
+    }
+
+    .scorebox {
+      min-width: 70px;
+      padding: 7px 12px;
+      border: 2px solid var(--ink);
+      border-radius: 14px;
+      background: var(--cream);
+      color: var(--ink);
+      font-weight: 900;
+      line-height: 1;
+      text-align: center;
+      box-shadow: 0 4px 0 var(--ink);
+    }
+
+    .scorebox small {
+      display: block;
+      margin-bottom: 3px;
+      font-size: .65rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .62;
+    }
+
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      border: 2px solid var(--ink);
+      border-radius: 13px;
+      background: var(--cream);
+      color: var(--ink);
+      font: inherit;
+      font-size: 1.15rem;
+      font-weight: 900;
+      box-shadow: 0 4px 0 var(--ink);
+      cursor: pointer;
+    }
+
+    .icon-button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+
+    .equation {
+      position: absolute;
+      z-index: 3;
+      left: 50%;
+      top: clamp(72px, 11vh, 98px);
+      transform: translateX(-50%);
+      min-width: min(75%, 340px);
+      padding: 9px 24px 11px;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      background: var(--cream);
+      color: var(--ink);
+      font-size: clamp(1.8rem, 7vw, 3rem);
+      font-weight: 1000;
+      letter-spacing: -.04em;
+      text-align: center;
+      box-shadow: 0 6px 0 var(--ink);
+      pointer-events: none;
+    }
+
+    .equation.pulse { animation: pulse .18s ease-out; }
+
+    @keyframes pulse {
+      50% { transform: translateX(-50%) scale(1.08) rotate(-1deg); }
+    }
+
+    .overlay {
+      position: absolute;
+      z-index: 5;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      overflow-y: auto;
+      background: rgba(7,26,61,.18);
+      backdrop-filter: blur(2px);
+    }
+
+    .overlay[hidden] { display: none; }
+
+    .card {
+      width: min(100%, 390px);
+      padding: clamp(24px, 6vw, 38px);
+      border: 3px solid var(--ink);
+      border-radius: 28px;
+      background: var(--cream);
+      color: var(--ink);
+      text-align: center;
+      box-shadow: 0 10px 0 var(--ink), 0 22px 45px rgba(7,26,61,.22);
+    }
+
+    .mascot {
+      display: block;
+      margin-bottom: 4px;
+      font-size: clamp(3.5rem, 15vw, 5.5rem);
+      line-height: 1;
+      filter: drop-shadow(0 5px 0 rgba(7,26,61,.18));
+    }
+
+    .mascot-img {
+      width: min(78%, 240px);
+      height: auto;
+      margin: 0 auto 8px;
+    }
+
+    h1 {
+      margin: 8px 0 8px;
+      font-size: clamp(2.25rem, 10vw, 4rem);
+      line-height: .95;
+      letter-spacing: -.075em;
+    }
+
+    .card p {
+      margin: 10px auto 22px;
+      max-width: 290px;
+      font-size: clamp(1rem, 3.8vw, 1.2rem);
+      line-height: 1.45;
+      font-weight: 700;
+      opacity: .78;
+    }
+
+    .result {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 16px 0 20px;
+    }
+
+    .result div {
+      min-width: 100px;
+      padding: 12px;
+      border: 2px solid var(--ink);
+      border-radius: 16px;
+      background: #fff;
+      font-size: 1.7rem;
+      font-weight: 1000;
+    }
+
+    .result small {
+      display: block;
+      margin-bottom: 4px;
+      font-size: .68rem;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      opacity: .55;
+    }
+
+    .game-over-card {
+      width: min(100%, 540px);
+      padding: clamp(20px, 4vw, 30px);
+    }
+
+    .game-over-card > .mascot {
+      margin: 0;
+      font-size: clamp(2.5rem, 8vw, 4rem);
+    }
+
+    .game-over-card > h1 {
+      font-size: clamp(2rem, 7vw, 3.2rem);
+    }
+
+    .game-over-card > p {
+      margin-bottom: 14px;
+    }
+
+    .game-over-grid {
+      display: grid;
+      grid-template-columns: minmax(110px, .8fr) minmax(220px, 1.45fr);
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+
+    .game-over-card .result {
+      flex-direction: column;
+      gap: 9px;
+      margin: 0;
+    }
+
+    .game-over-card .result div {
+      min-width: 0;
+      padding: 10px;
+      font-size: 1.55rem;
+    }
+
+    .leaderboard {
+      min-height: 250px;
+      overflow: hidden;
+      border: 2px solid var(--ink);
+      border-radius: 17px;
+      background: #fff;
+      text-align: left;
+    }
+
+    .leaderboard-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 2px solid var(--ink);
+      background: var(--yellow);
+    }
+
+    .leaderboard-header strong {
+      font-size: .86rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .leaderboard-header span {
+      font-size: .65rem;
+      font-weight: 900;
+      opacity: .6;
+      white-space: nowrap;
+    }
+
+    .leaderboard-list {
+      list-style: none;
+      margin: 0;
+      padding: 5px 0;
+    }
+
+    .leaderboard-row {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+      min-height: 23px;
+      padding: 2px 10px;
+      font-size: .76rem;
+      font-weight: 900;
+    }
+
+    .leaderboard-row.is-you {
+      background: #dceaff;
+      color: #064fc4;
+    }
+
+    .leaderboard-rank {
+      width: 21px;
+      height: 21px;
+      display: grid;
+      place-items: center;
+      border: 1.5px solid currentColor;
+      border-radius: 50%;
+      font-size: .67rem;
+    }
+
+    .rank-1 { background: #ffd44d; }
+    .rank-2 { background: #dce3ea; }
+    .rank-3 { background: #efb98a; }
+
+    .leaderboard-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .leaderboard-score { font-variant-numeric: tabular-nums; }
+
+    .leaderboard-status {
+      padding: 30px 16px;
+      color: #486078;
+      font-size: .8rem;
+      font-weight: 800;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .player-name {
+      display: block;
+      margin: 7px 0 1px;
+      color: #486078;
+      font-size: .72rem;
+      font-weight: 900;
+    }
+
+    .play-button {
+      width: 100%;
+      min-height: 58px;
+      border: 3px solid var(--ink);
+      border-radius: 17px;
+      background: var(--yellow);
+      color: var(--ink);
+      font: inherit;
+      font-size: 1.15rem;
+      font-weight: 1000;
+      letter-spacing: .02em;
+      box-shadow: 0 6px 0 var(--ink);
+      cursor: pointer;
+    }
+
+    .play-button:hover { filter: brightness(1.04); transform: translateY(-1px); }
+    .play-button:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--ink); }
+    .play-button:focus-visible, .icon-button:focus-visible { outline: 4px solid var(--blue); outline-offset: 3px; }
+
+    .hint {
+      position: absolute;
+      z-index: 3;
+      left: 50%;
+      bottom: max(14px, env(safe-area-inset-bottom));
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: calc(100% - 28px);
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(7,26,61,.78);
+      color: white;
+      font-size: clamp(.75rem, 2.8vw, .9rem);
+      font-weight: 800;
+      text-align: center;
+      pointer-events: none;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-height: 650px) {
+      body { padding: 6px; }
+      .shell { height: calc(100dvh - 12px); min-height: 0; border-radius: 18px; }
+      .equation { top: 65px; padding-block: 6px 8px; }
+      .hint { bottom: 8px; }
+      .card { padding: 20px 26px; }
+      .mascot { font-size: 3.2rem; }
+      h1 { font-size: 2.5rem; }
+      .card p { margin: 8px auto 15px; }
+      .game-over-card { padding: 14px 18px; }
+      .game-over-card > .mascot { display: none; }
+      .game-over-card > h1 { margin-top: 0; font-size: 2rem; }
+      .leaderboard-row { min-height: 20px; padding-block: 0; }
+      .leaderboard { min-height: 225px; }
+    }
+
+    @media (max-width: 430px) {
+      .game-over-grid { grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
+      .leaderboard-row { padding-inline: 7px; font-size: .71rem; }
+      .leaderboard-header { padding-inline: 9px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" id="gameShell">
+    <canvas id="game" aria-label="SkySum game area"></canvas>
+
+    <header class="topbar">
+      <div class="brand">Sky<span>Sum</span></div>
+      <div class="stats">
+        <div class="scorebox"><small>Score</small><span id="score">0</span></div>
+        <button class="icon-button" id="soundButton" aria-label="Mute sound" title="Sound">♪</button>
+      </div>
+    </header>
+
+    <div class="equation" id="equation" aria-live="polite">1 + 2 = ?</div>
+    <div class="hint" id="hint">Tap, click, or press Space to flap</div>
+
+    <section class="overlay" id="startOverlay">
+      <div class="card">
+        <img class="mascot mascot-img" src="math-owl.png" alt="">
+        <h1>SkySum</h1>
+        <p>Solve the sum, then fly through the correct answer.</p>
+        <button class="play-button" id="startButton">Start flapping</button>
+      </div>
+    </section>
+
+    <section class="overlay" id="gameOverOverlay" hidden>
+      <div class="card game-over-card">
+        <span class="mascot" aria-hidden="true">💫</span>
+        <h1 id="overTitle">So close!</h1>
+        <p id="overMessage">One more try?</p>
+        <div class="game-over-grid">
+          <div class="result">
+            <div><small>Score</small><span id="finalScore">0</span></div>
+            <div><small>Best</small><span id="bestScore">0</span></div>
+            <span class="player-name" id="playerName">Assigning your name…</span>
+          </div>
+          <section class="leaderboard" aria-labelledby="leaderboardTitle">
+            <div class="leaderboard-header">
+              <strong id="leaderboardTitle">Daily top 10</strong>
+              <span id="leaderboardReset">UTC</span>
+            </div>
+            <ol class="leaderboard-list" id="leaderboardList">
+              <li class="leaderboard-status">Loading today’s scores…</li>
+            </ol>
+          </section>
+        </div>
+        <button class="play-button" id="restartButton">Try again</button>
+      </div>
+    </section>
+
+    <p class="sr-only" id="liveStatus" aria-live="assertive"></p>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      const shell = document.getElementById('gameShell');
+      const scoreEl = document.getElementById('score');
+      const equationEl = document.getElementById('equation');
+      const hintEl = document.getElementById('hint');
+      const startOverlay = document.getElementById('startOverlay');
+      const gameOverOverlay = document.getElementById('gameOverOverlay');
+      const startButton = document.getElementById('startButton');
+      const restartButton = document.getElementById('restartButton');
+      const finalScoreEl = document.getElementById('finalScore');
+      const bestScoreEl = document.getElementById('bestScore');
+      const overTitle = document.getElementById('overTitle');
+      const overMessage = document.getElementById('overMessage');
+      const liveStatus = document.getElementById('liveStatus');
+      const soundButton = document.getElementById('soundButton');
+      const playerNameEl = document.getElementById('playerName');
+      const leaderboardList = document.getElementById('leaderboardList');
+      const leaderboardReset = document.getElementById('leaderboardReset');
+
+      const COLORS = {
+        ink: '#071a3d', skyTop: '#4fd2ff', skyBottom: '#148cff',
+        pipe: '#125cff', pipeLight: '#4c9bff', yellow: '#ffd44d',
+        cream: '#fff9e7', white: '#ffffff', red: '#ff4f64', green: '#20d39a'
+      };
+
+      const owlSprite = new Image();
+      owlSprite.src = 'math-owl.png';
+      let wingFlapStartedAt = -Infinity;
+
+      let W = 640;
+      let H = 820;
+      let dpr = 1;
+      let state = 'ready';
+      let lastTime = 0;
+      let score = 0;
+      let best = loadBest();
+      let muted = false;
+      let audioContext = null;
+      let screenFlash = 0;
+      let successText = 0;
+      let particles = [];
+      let playerNickname = '';
+      let playerReady = null;
+      let activeRunPromise = null;
+
+      const bird = { x: 145, y: 390, vy: 0, radius: 18 };
+      const gate = {
+        x: 700, width: 82, topCenter: 265, bottomCenter: 545,
+        gap: 118, answered: false, question: null, topAnswer: 3, bottomAnswer: 4
+      };
+
+      function loadBest() {
+        try { return Number(localStorage.getItem('skySumBest')) || 0; }
+        catch (_) { return 0; }
+      }
+
+      function saveBest() {
+        try { localStorage.setItem('skySumBest', String(best)); }
+        catch (_) { /* best score remains available for this session */ }
+      }
+
+      function resize() {
+        const rect = shell.getBoundingClientRect();
+        W = rect.width;
+        H = rect.height;
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        bird.x = W * 0.23;
+        bird.radius = Math.max(15, Math.min(20, W * 0.032));
+        configureGateGeometry();
+      }
+
+      function configureGateGeometry() {
+        gate.width = Math.max(66, Math.min(88, W * 0.14));
+        const playTop = Math.max(150, H * 0.2);
+        const playBottom = H - 70;
+        const span = playBottom - playTop;
+        gate.topCenter = playTop + span * 0.27;
+        gate.bottomCenter = playTop + span * 0.73;
+        const maxGap = Math.max(126, span * 0.4);
+        gate.gap = Math.min(maxGap, Math.max(118, 176 - Math.min(score, 40) * 1.45));
+      }
+
+      function randomInt(min, max) {
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+      }
+
+      function makeQuestion(level) {
+        let a, b, answer, text;
+        if (level < 5) {
+          a = randomInt(1, 3);
+          b = randomInt(1, Math.max(1, 5 - a));
+          answer = a + b;
+          text = `${a} + ${b}`;
+        } else if (level < 13) {
+          if (Math.random() < 0.28) {
+            answer = randomInt(1, 7);
+            b = randomInt(1, 4);
+            a = answer + b;
+            text = `${a} − ${b}`;
+          } else {
+            a = randomInt(1, 7);
+            b = randomInt(1, Math.max(2, 10 - a));
+            answer = a + b;
+            text = `${a} + ${b}`;
+          }
+        } else if (level < 28) {
+          if (Math.random() < 0.45) {
+            answer = randomInt(2, 15);
+            b = randomInt(1, Math.min(9, 20 - answer));
+            a = answer + b;
+            text = `${a} − ${b}`;
+          } else {
+            a = randomInt(3, 12);
+            b = randomInt(2, 9);
+            answer = a + b;
+            text = `${a} + ${b}`;
+          }
+        } else {
+          a = randomInt(2, Math.min(9, 4 + Math.floor(level / 15)));
+          b = randomInt(2, 9);
+          answer = a * b;
+          text = `${a} × ${b}`;
+        }
+
+        let wrong = answer + randomInt(-3, 3);
+        while (wrong === answer || wrong < 0) wrong = answer + randomInt(-3, 3);
+        return { text, answer, wrong };
+      }
+
+      function placeQuestion() {
+        gate.question = makeQuestion(score);
+        if (Math.random() < 0.5) {
+          gate.topAnswer = gate.question.answer;
+          gate.bottomAnswer = gate.question.wrong;
+        } else {
+          gate.topAnswer = gate.question.wrong;
+          gate.bottomAnswer = gate.question.answer;
+        }
+        gate.answered = false;
+        equationEl.textContent = `${gate.question.text} = ?`;
+        equationEl.classList.remove('pulse');
+        void equationEl.offsetWidth;
+        equationEl.classList.add('pulse');
+        liveStatus.textContent = `Question: ${gate.question.text}. Choose ${gate.topAnswer} above or ${gate.bottomAnswer} below.`;
+      }
+
+      function resetGame() {
+        score = 0;
+        scoreEl.textContent = '0';
+        bird.x = W * 0.23;
+        bird.y = H * 0.53;
+        bird.vy = 0;
+        particles = [];
+        screenFlash = 0;
+        successText = 0;
+        configureGateGeometry();
+        gate.x = W + Math.max(100, W * 0.2);
+        placeQuestion();
+      }
+
+      function startGame() {
+        ensureAudio();
+        resetGame();
+        activeRunPromise = startRun();
+        state = 'playing';
+        startOverlay.hidden = true;
+        gameOverOverlay.hidden = true;
+        hintEl.textContent = 'Choose the correct answer';
+        lastTime = performance.now();
+        flap();
+      }
+
+      function flap() {
+        if (state !== 'playing') return;
+        wingFlapStartedAt = performance.now();
+        bird.vy = -Math.max(335, Math.min(405, H * 0.47));
+        tone(560, 0.045, 0.035, 'sine');
+      }
+
+      function ensureAudio() {
+        if (!audioContext) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) audioContext = new AudioCtx();
+        }
+        if (audioContext?.state === 'suspended') audioContext.resume();
+      }
+
+      function tone(frequency, duration, volume, type = 'sine', delay = 0) {
+        if (muted || !audioContext) return;
+        const now = audioContext.currentTime + delay;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(frequency, now);
+        gain.gain.setValueAtTime(volume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        osc.connect(gain).connect(audioContext.destination);
+        osc.start(now);
+        osc.stop(now + duration);
+      }
+
+      function correctAnswer() {
+        gate.answered = true;
+        score += 1;
+        scoreEl.textContent = String(score);
+        successText = 0.7;
+        screenFlash = 0.12;
+        burst(bird.x + 24, bird.y);
+        tone(720, 0.08, 0.055, 'triangle');
+        tone(980, 0.11, 0.04, 'triangle', 0.07);
+        liveStatus.textContent = `Correct. Score ${score}.`;
+      }
+
+      function endGame(reason, chosen = null) {
+        if (state !== 'playing') return;
+        state = 'over';
+        screenFlash = 0.28;
+        tone(185, 0.28, 0.07, 'sawtooth');
+        best = Math.max(best, score);
+        saveBest();
+        finalScoreEl.textContent = String(score);
+        bestScoreEl.textContent = String(best);
+        if (reason === 'wrong') {
+          overTitle.textContent = 'Wrong gate!';
+          overMessage.textContent = `${gate.question.text} = ${gate.question.answer}, not ${chosen}.`;
+        } else {
+          overTitle.textContent = score === 0 ? 'Give it another flap!' : 'So close!';
+          overMessage.textContent = score > 0 ? `You solved ${score} ${score === 1 ? 'sum' : 'sums'}. Beat it on the next run.` : 'Keep the owl between the pipes.';
+        }
+        liveStatus.textContent = `${overTitle.textContent} Score ${score}. Best ${best}.`;
+        setTimeout(() => { gameOverOverlay.hidden = false; restartButton.focus(); }, 280);
+        const finishedRun = activeRunPromise;
+        showLeaderboardStatus('Saving your score…');
+        void submitScore(score, finishedRun);
+      }
+
+      async function initializePlayer() {
+        try {
+          const response = await fetch('/api/player', { method: 'POST' });
+          if (!response.ok) throw new Error('Player initialization failed');
+          const data = await response.json();
+          playerNickname = data.nickname;
+          playerNameEl.textContent = `You are ${playerNickname}`;
+          return playerNickname;
+        } catch (_) {
+          playerNameEl.textContent = 'Anonymous player';
+          return null;
+        }
+      }
+
+      async function startRun() {
+        try {
+          await playerReady;
+          const response = await fetch('/api/run', { method: 'POST' });
+          if (!response.ok) throw new Error('Run initialization failed');
+          const data = await response.json();
+          if (data.nickname) {
+            playerNickname = data.nickname;
+            playerNameEl.textContent = `You are ${playerNickname}`;
+          }
+          return data.runId;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function showLeaderboardStatus(message) {
+        const item = document.createElement('li');
+        item.className = 'leaderboard-status';
+        item.textContent = message;
+        leaderboardList.replaceChildren(item);
+      }
+
+      function resetCountdown(resetsAt) {
+        const milliseconds = Math.max(0, Number(resetsAt) - Date.now());
+        const hours = Math.floor(milliseconds / 3_600_000);
+        const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
+        return `Resets in ${hours}h ${String(minutes).padStart(2, '0')}m`;
+      }
+
+      function makeLeaderboardRow(entry) {
+        const row = document.createElement('li');
+        row.className = `leaderboard-row${entry.isYou ? ' is-you' : ''}`;
+
+        const rank = document.createElement('span');
+        rank.className = `leaderboard-rank rank-${entry.rank}`;
+        rank.textContent = String(entry.rank);
+
+        const name = document.createElement('span');
+        name.className = 'leaderboard-name';
+        name.textContent = entry.isYou ? `${entry.nickname} · YOU` : entry.nickname;
+
+        const points = document.createElement('span');
+        points.className = 'leaderboard-score';
+        points.textContent = String(entry.score);
+
+        row.append(rank, name, points);
+        return row;
+      }
+
+      function renderLeaderboard(data) {
+        if (data.nickname) {
+          playerNickname = data.nickname;
+          playerNameEl.textContent = `You are ${playerNickname}`;
+        }
+        leaderboardReset.textContent = resetCountdown(data.resetsAt);
+        const rows = Array.isArray(data.entries) ? [...data.entries] : [];
+        if (data.you && !rows.some((entry) => entry.isYou)) rows.push(data.you);
+        if (!rows.length) {
+          showLeaderboardStatus('Be the first player on today’s board!');
+          return;
+        }
+        leaderboardList.replaceChildren(...rows.map(makeLeaderboardRow));
+      }
+
+      async function loadLeaderboard() {
+        const response = await fetch('/api/leaderboard');
+        if (!response.ok) throw new Error('Leaderboard load failed');
+        return response.json();
+      }
+
+      async function submitScore(finalScore, runPromise) {
+        try {
+          const runId = await runPromise;
+          if (!runId) throw new Error('Run was not registered');
+          const response = await fetch('/api/score', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runId, score: finalScore }),
+          });
+          if (!response.ok) throw new Error('Score submission failed');
+          renderLeaderboard(await response.json());
+        } catch (_) {
+          try {
+            renderLeaderboard(await loadLeaderboard());
+          } catch (_) {
+            showLeaderboardStatus('Leaderboard temporarily unavailable. Try again after your next run.');
+          }
+        }
+      }
+
+      function burst(x, y) {
+        const colors = [COLORS.yellow, COLORS.cream, COLORS.green, COLORS.white];
+        for (let i = 0; i < 16; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = randomInt(70, 210);
+          particles.push({
+            x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+            life: 0.65, size: randomInt(3, 7), color: colors[i % colors.length]
+          });
+        }
+      }
+
+      function update(dt) {
+        screenFlash = Math.max(0, screenFlash - dt);
+        successText = Math.max(0, successText - dt);
+
+        for (const p of particles) {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy += 360 * dt;
+          p.life -= dt;
+        }
+        particles = particles.filter(p => p.life > 0);
+
+        if (state === 'ready') {
+          bird.y = H * 0.53 + Math.sin(performance.now() / 380) * 10;
+          return;
+        }
+        if (state !== 'playing') return;
+
+        const gravity = Math.max(920, H * 1.28);
+        bird.vy += gravity * dt;
+        bird.y += bird.vy * dt;
+
+        const speed = Math.min(245, 145 + score * 4.2);
+        gate.x -= speed * dt;
+
+        if (bird.y - bird.radius < 0 || bird.y + bird.radius > H) {
+          endGame('pipe');
+          return;
+        }
+
+        const overlapsX = bird.x + bird.radius > gate.x && bird.x - bird.radius < gate.x + gate.width;
+        if (overlapsX) {
+          const topMin = gate.topCenter - gate.gap / 2;
+          const topMax = gate.topCenter + gate.gap / 2;
+          const bottomMin = gate.bottomCenter - gate.gap / 2;
+          const bottomMax = gate.bottomCenter + gate.gap / 2;
+          const safelyInTop = bird.y - bird.radius > topMin && bird.y + bird.radius < topMax;
+          const safelyInBottom = bird.y - bird.radius > bottomMin && bird.y + bird.radius < bottomMax;
+          if (!safelyInTop && !safelyInBottom) {
+            endGame('pipe');
+            return;
+          }
+        }
+
+        if (!gate.answered && gate.x + gate.width < bird.x - bird.radius) {
+          const chosen = Math.abs(bird.y - gate.topCenter) < Math.abs(bird.y - gate.bottomCenter)
+            ? gate.topAnswer : gate.bottomAnswer;
+          if (chosen === gate.question.answer) correctAnswer();
+          else endGame('wrong', chosen);
+        }
+
+        if (gate.x + gate.width < -10) {
+          configureGateGeometry();
+          gate.x = W + Math.max(90, W * 0.16);
+          placeQuestion();
+        }
+      }
+
+      function roundedRect(x, y, width, height, radius) {
+        if (height <= 0) return;
+        const r = Math.min(radius, width / 2, height / 2);
+        ctx.beginPath();
+        ctx.roundRect(x, y, width, height, r);
+      }
+
+      function drawBackground() {
+        const gradient = ctx.createLinearGradient(0, 0, 0, H);
+        gradient.addColorStop(0, COLORS.skyTop);
+        gradient.addColorStop(1, COLORS.skyBottom);
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.globalAlpha = 0.16;
+        ctx.fillStyle = COLORS.white;
+        const drift = (performance.now() * 0.012) % 90;
+        for (let row = 0; row < 7; row++) {
+          for (let col = -1; col < 8; col++) {
+            const x = col * 90 + (row % 2) * 45 - drift;
+            const y = 160 + row * 95;
+            ctx.beginPath();
+            ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawGate() {
+        const x = gate.x;
+        const w = gate.width;
+        const t1 = gate.topCenter - gate.gap / 2;
+        const b1 = gate.topCenter + gate.gap / 2;
+        const t2 = gate.bottomCenter - gate.gap / 2;
+        const b2 = gate.bottomCenter + gate.gap / 2;
+        const segments = [[0, t1], [b1, t2 - b1], [b2, H - b2]];
+
+        for (const [y, h] of segments) {
+          if (h <= 0) continue;
+          roundedRect(x, y - 5, w, h + 10, 13);
+          ctx.fillStyle = COLORS.pipe;
+          ctx.fill();
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = COLORS.ink;
+          ctx.stroke();
+
+          ctx.fillStyle = COLORS.pipeLight;
+          roundedRect(x + 9, y + 6, Math.max(8, w * 0.16), Math.max(0, h - 12), 5);
+          ctx.fill();
+        }
+
+        drawAnswer(gate.topAnswer, gate.topCenter, gate.question?.answer === gate.topAnswer && successText > 0);
+        drawAnswer(gate.bottomAnswer, gate.bottomCenter, gate.question?.answer === gate.bottomAnswer && successText > 0);
+      }
+
+      function drawAnswer(answer, centerY, isCorrect) {
+        const bubbleW = Math.max(72, gate.width + 12);
+        const bubbleH = 54;
+        const bx = gate.x + gate.width / 2 - bubbleW / 2;
+        const by = centerY - bubbleH / 2;
+        roundedRect(bx, by, bubbleW, bubbleH, 16);
+        ctx.fillStyle = isCorrect ? COLORS.green : COLORS.cream;
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = COLORS.ink;
+        ctx.stroke();
+        ctx.fillStyle = COLORS.ink;
+        ctx.font = `1000 ${Math.max(24, Math.min(34, W * 0.055))}px ui-rounded, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(answer), gate.x + gate.width / 2, centerY + 1);
+      }
+
+      function drawBird() {
+        ctx.save();
+        ctx.translate(bird.x, bird.y);
+        ctx.shadowColor = 'rgba(7,26,61,.28)';
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetY = 4;
+        if (owlSprite.complete && owlSprite.naturalWidth) {
+          const width = bird.radius * 4.6;
+          const height = width * owlSprite.naturalHeight / owlSprite.naturalWidth;
+          const flapAge = performance.now() - wingFlapStartedAt;
+          if (flapAge < 400) {
+            // The sprite is one flat image, so slice the wings out and rotate them around their shoulders.
+            const scale = width / owlSprite.naturalWidth;
+            const flap = flapAge / 400;
+            const poses = [0, 0.2, -0.13, 0.16, 0];
+            const phase = Math.min(3, Math.floor(flap * 4));
+            const progress = flap * 4 - phase;
+            const eased = progress * progress * (3 - 2 * progress);
+            const angle = poses[phase] + (poses[phase + 1] - poses[phase]) * eased;
+
+            const drawWing = (sourceX, sourceWidth, pivotX, pivotY, rotation) => {
+              ctx.save();
+              ctx.translate(
+                (pivotX - owlSprite.naturalWidth / 2) * scale,
+                (pivotY - owlSprite.naturalHeight / 2) * scale
+              );
+              ctx.rotate(rotation);
+              ctx.drawImage(
+                owlSprite, sourceX, 0, sourceWidth, owlSprite.naturalHeight,
+                (sourceX - pivotX) * scale, -pivotY * scale,
+                sourceWidth * scale, height
+              );
+              ctx.restore();
+            };
+
+            drawWing(0, 150, 145, 62, angle);
+            drawWing(280, 40, 282, 70, -angle);
+            // Body last, so it hides where the wing slices were cut.
+            ctx.drawImage(
+              owlSprite, 140, 0, 146, owlSprite.naturalHeight,
+              (140 - owlSprite.naturalWidth / 2) * scale,
+              -height / 2, 146 * scale, height
+            );
+          } else {
+            ctx.drawImage(owlSprite, -width / 2, -height / 2, width, height);
+          }
+        } else {
+          ctx.font = `${bird.radius * 2.45}px "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🦉', 0, 0);
+        }
+        ctx.restore();
+      }
+
+      function drawParticles() {
+        for (const p of particles) {
+          ctx.globalAlpha = Math.max(0, p.life / 0.65);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(p.x, p.y, p.size, p.size);
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function drawSuccess() {
+        if (successText <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, successText * 3);
+        ctx.fillStyle = COLORS.cream;
+        ctx.strokeStyle = COLORS.ink;
+        ctx.lineWidth = 6;
+        ctx.font = `1000 ${Math.max(36, Math.min(62, W * 0.1))}px ui-rounded, system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText('CORRECT!', W / 2, H * 0.46);
+        ctx.fillText('CORRECT!', W / 2, H * 0.46);
+        ctx.restore();
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        drawBackground();
+        drawGate();
+        drawParticles();
+        drawBird();
+        drawSuccess();
+
+        if (screenFlash > 0) {
+          ctx.fillStyle = state === 'over' ? `rgba(255,79,100,${screenFlash})` : `rgba(255,249,231,${screenFlash})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+
+      function loop(time) {
+        const dt = Math.min(0.033, (time - lastTime) / 1000 || 0);
+        lastTime = time;
+        update(dt);
+        draw();
+        requestAnimationFrame(loop);
+      }
+
+      function handleGameInput(event) {
+        if (event.target.closest('button')) return;
+        if (state === 'playing') {
+          event.preventDefault();
+          flap();
+        }
+      }
+
+      startButton.addEventListener('click', startGame);
+      restartButton.addEventListener('click', startGame);
+      shell.addEventListener('pointerdown', handleGameInput);
+      window.addEventListener('keydown', (event) => {
+        if (event.code !== 'Space' && event.code !== 'ArrowUp') return;
+        event.preventDefault();
+        if (state === 'ready') startGame();
+        else if (state === 'playing') flap();
+        else if (state === 'over') startGame();
+      });
+      soundButton.addEventListener('click', () => {
+        muted = !muted;
+        soundButton.textContent = muted ? '×' : '♪';
+        soundButton.setAttribute('aria-label', muted ? 'Turn sound on' : 'Mute sound');
+        if (!muted) { ensureAudio(); tone(620, 0.08, 0.045, 'triangle'); }
+      });
+
+      function registerAgentTools() {
+        const modelContext = document.modelContext;
+        if (!modelContext?.registerTool) return;
+        const requireEmptyObject = (input) => {
+          if (input === undefined) return;
+          if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).length) {
+            throw new TypeError('This action does not accept any inputs.');
+          }
+        };
+        const register = (tool) => {
+          try { void Promise.resolve(modelContext.registerTool(tool)).catch(() => {}); }
+          catch (_) { /* Agent tools are an optional browser enhancement. */ }
+        };
+        register({
+          name: 'start_skysum_game',
+          title: 'Start SkySum',
+          description: 'Start or restart the visible SkySum game from score zero.',
+          inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          annotations: { readOnlyHint: false, untrustedContentHint: false },
+          execute(input) {
+            requireEmptyObject(input);
+            startGame();
+            return { state, score, question: gate.question.text };
+          }
+        });
+        register({
+          name: 'read_skysum_state',
+          title: 'Read SkySum state',
+          description: 'Read the current visible score, question, answer choices, and game state.',
+          inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+          annotations: { readOnlyHint: true, untrustedContentHint: false },
+          execute(input) {
+            requireEmptyObject(input);
+            return {
+              state,
+              score,
+              best,
+              question: gate.question?.text ?? null,
+              choices: [gate.topAnswer, gate.bottomAnswer]
+            };
+          }
+        });
+      }
+
+      const resizeObserver = new ResizeObserver(resize);
+      resizeObserver.observe(shell);
+      resize();
+      resetGame();
+      state = 'ready';
+      playerReady = initializePlayer();
+      registerAgentTools();
+      requestAnimationFrame((time) => { lastTime = time; requestAnimationFrame(loop); });
+    })();
+  </script>
+</body>
+</html>
