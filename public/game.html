@@ -11,7 +11,7 @@
     :root {
       color-scheme: dark;
       --ink: #071a3d;
-      --sky: #49c8ff;
+      --sky: #102c52;
       --blue: #1477ff;
       --yellow: #ffd44d;
       --cream: #fff9e7;
@@ -73,15 +73,15 @@
     }
 
     .brand {
-      color: var(--ink);
+      color: var(--cream);
       font-size: clamp(1.05rem, 3.6vw, 1.4rem);
       font-weight: 1000;
       letter-spacing: -.05em;
       text-transform: uppercase;
-      text-shadow: 0 2px rgba(255,255,255,.32);
+      text-shadow: 0 2px rgba(7,26,61,.5);
     }
 
-    .brand span { color: var(--cream); }
+    .brand span { color: var(--yellow); }
 
     .stats {
       display: flex;
@@ -519,14 +519,15 @@
       const leaderboardReset = document.getElementById('leaderboardReset');
 
       const COLORS = {
-        ink: '#071a3d', skyTop: '#4fd2ff', skyBottom: '#148cff',
-        pipe: '#125cff', pipeLight: '#4c9bff', yellow: '#ffd44d',
+        ink: '#071a3d', skyTop: '#0b1935', skyBottom: '#1b527c',
+        yellow: '#ffd44d',
         cream: '#fff9e7', white: '#ffffff', red: '#ff4f64', green: '#20d39a'
       };
 
       const owlSprite = new Image();
       owlSprite.src = 'math-owl.png';
       let wingFlapStartedAt = -Infinity;
+      let sceneryDistance = 0;
 
       let W = 640;
       let H = 820;
@@ -663,6 +664,7 @@
         bird.x = W * 0.23;
         bird.y = H * 0.53;
         bird.vy = 0;
+        sceneryDistance = 0;
         particles = [];
         screenFlash = 0;
         successText = 0;
@@ -739,7 +741,7 @@
           overMessage.textContent = `${gate.question.text} = ${gate.question.answer}, not ${chosen}.`;
         } else {
           overTitle.textContent = score === 0 ? 'Give it another flap!' : 'So close!';
-          overMessage.textContent = score > 0 ? `You solved ${score} ${score === 1 ? 'sum' : 'sums'}. Beat it on the next run.` : 'Keep the owl between the pipes.';
+          overMessage.textContent = score > 0 ? `You solved ${score} ${score === 1 ? 'sum' : 'sums'}. Beat it on the next run.` : 'Keep the owl between the books.';
         }
         liveStatus.textContent = `${overTitle.textContent} Score ${score}. Best ${best}.`;
         setTimeout(() => { gameOverOverlay.hidden = false; restartButton.focus(); }, 280);
@@ -889,6 +891,7 @@
 
         const speed = Math.min(245, 145 + score * 4.2);
         gate.x -= speed * dt;
+        sceneryDistance += speed * dt;
 
         if (bird.y - bird.radius < 0 || bird.y + bird.radius > H) {
           endGame('pipe');
@@ -907,7 +910,7 @@
             endGame('pipe');
             return;
           }
-          // The middle pipe separates the two openings, so the one entered is final.
+          // The middle book stack separates the two openings, so the one entered is final.
           if (gate.choice === null) {
             gate.choice = safelyInTop ? gate.topAnswer : gate.bottomAnswer;
             if (gate.choice !== gate.question.answer) {
@@ -951,23 +954,103 @@
       function drawBackground() {
         const gradient = ctx.createLinearGradient(0, 0, 0, H);
         gradient.addColorStop(0, COLORS.skyTop);
+        gradient.addColorStop(0.58, '#123b67');
         gradient.addColorStop(1, COLORS.skyBottom);
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, W, H);
 
-        ctx.globalAlpha = 0.16;
-        ctx.fillStyle = COLORS.white;
-        const drift = (performance.now() * 0.012) % 90;
-        for (let row = 0; row < 7; row++) {
-          for (let col = -1; col < 8; col++) {
-            const x = col * 90 + (row % 2) * 45 - drift;
-            const y = 160 + row * 95;
+        const stars = [
+          [.09,.14], [.24,.2], [.42,.08], [.7,.16], [.89,.11],
+          [.14,.32], [.35,.39], [.61,.29], [.83,.36], [.95,.27],
+          [.06,.53], [.3,.59], [.55,.48], [.76,.57], [.92,.64],
+          [.18,.71], [.47,.68], [.68,.76], [.88,.73]
+        ];
+        ctx.fillStyle = 'rgba(255,231,168,.68)';
+        for (let i = 0; i < stars.length; i++) {
+          const [sx, sy] = stars[i];
+          ctx.beginPath();
+          ctx.arc(sx * W, sy * H, i % 5 === 0 ? 1.5 : 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.fillStyle = 'rgba(143,186,218,.08)';
+        for (const [side, level] of [[0,.34], [1,.5], [0,.67], [1,.78]]) {
+          const edge = side * W;
+          for (let i = 0; i < 3; i++) {
             ctx.beginPath();
-            ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+            ctx.ellipse(edge + (side ? -1 : 1) * i * W * .065,
+              H * level + i * H * .012, W * .11, H * .025, 0, 0, Math.PI * 2);
             ctx.fill();
           }
         }
-        ctx.globalAlpha = 1;
+
+        const buildingWidths = [1.0,.72,1.18,.84,1.1,.76,.98,.82,1.16,.7,1.04,.9];
+        for (let layer = 0; layer < 2; layer++) {
+          const unit = W / 11;
+          const heights = layer === 0
+            ? [.13,.1,.17,.12,.15,.09,.14,.18,.11,.16,.12,.14]
+            : [.08,.12,.1,.15,.09,.13,.11,.08,.14,.1,.12,.09];
+          const offset = (sceneryDistance * (layer === 0 ? .12 : .22)) % (heights.length * unit);
+          ctx.fillStyle = layer === 0 ? '#173f68' : '#102e50';
+          for (let i = -heights.length; i < heights.length * 2; i++) {
+            const index = (i + heights.length) % heights.length;
+            const x = i * unit - unit * .2 + (layer ? unit * .42 : 0) - offset;
+            if (x > W || x + unit * buildingWidths[index] < 0) continue;
+            const width = unit * buildingWidths[index];
+            const top = H * (1 - heights[index]);
+            ctx.fillRect(x, top, width, H - top);
+            if (layer === 1 && (index === 2 || index === 8)) {
+              ctx.fillRect(x + width * .5, top - H * .018, 2, H * .018);
+            }
+            if (index % 3 !== 0) {
+              ctx.fillStyle = 'rgba(247,193,105,.37)';
+              ctx.fillRect(x + width * .3, top + H * .025, Math.max(2, W * .005), Math.max(3, H * .008));
+              if (index % 4 === 1) {
+                ctx.fillRect(x + width * .65, top + H * .055, Math.max(2, W * .005), Math.max(3, H * .008));
+              }
+              ctx.fillStyle = layer === 0 ? '#173f68' : '#102e50';
+            }
+          }
+        }
+      }
+
+      function drawBookStack(x, y, w, h) {
+        if (h <= 0) return;
+        const count = Math.max(2, Math.min(4, Math.round(h / 62)));
+        const bookHeight = h / count;
+        const covers = ['#226779', '#56426f', '#a45b45', '#305a70'];
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        for (let i = 0; i < count; i++) {
+          const by = y + i * bookHeight + 1;
+          const bh = bookHeight - 2;
+          roundedRect(x + 1, by, w - 2, bh, Math.min(10, bh * .2));
+          ctx.fillStyle = covers[i % covers.length];
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = COLORS.ink;
+          ctx.stroke();
+
+          roundedRect(x + 18, by + 5, w - 25, Math.max(2, bh * .24), 5);
+          ctx.fillStyle = 'rgba(255,255,255,.1)';
+          ctx.fill();
+          ctx.fillStyle = 'rgba(255,210,126,.75)';
+          ctx.fillRect(x + 10, by + 8, 3, Math.max(0, bh - 16));
+          if (i === 2 && bh > 32) {
+            ctx.beginPath();
+            ctx.moveTo(x + w * .62, by + bh * .32);
+            ctx.lineTo(x + w * .7, by + bh * .5);
+            ctx.lineTo(x + w * .62, by + bh * .68);
+            ctx.lineTo(x + w * .54, by + bh * .5);
+            ctx.closePath();
+            ctx.strokeStyle = 'rgba(255,210,126,.75)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
       }
 
       function drawGate() {
@@ -980,17 +1063,7 @@
         const segments = [[0, t1], [b1, t2 - b1], [b2, H - b2]];
 
         for (const [y, h] of segments) {
-          if (h <= 0) continue;
-          roundedRect(x, y - 5, w, h + 10, 13);
-          ctx.fillStyle = COLORS.pipe;
-          ctx.fill();
-          ctx.lineWidth = 4;
-          ctx.strokeStyle = COLORS.ink;
-          ctx.stroke();
-
-          ctx.fillStyle = COLORS.pipeLight;
-          roundedRect(x + 9, y + 6, Math.max(8, w * 0.16), Math.max(0, h - 12), 5);
-          ctx.fill();
+          drawBookStack(x, y, w, h);
         }
 
         drawAnswer(gate.topAnswer, gate.topCenter);
