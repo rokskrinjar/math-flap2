@@ -381,6 +381,17 @@
       cursor: pointer;
     }
 
+    .game-over-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      gap: 12px;
+    }
+
+    .share-button {
+      background: var(--blue);
+      color: var(--white);
+    }
+
     .play-button:hover { filter: brightness(1.04); transform: translateY(-1px); }
     .play-button:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--ink); }
     .play-button:focus-visible, .icon-button:focus-visible { outline: 4px solid var(--blue); outline-offset: 3px; }
@@ -487,7 +498,10 @@
             </ol>
           </section>
         </div>
-        <button class="play-button" id="restartButton">Try again</button>
+        <div class="game-over-actions">
+          <button class="play-button share-button" id="shareButton">Share</button>
+          <button class="play-button" id="restartButton">Try again</button>
+        </div>
       </div>
     </section>
 
@@ -508,6 +522,7 @@
       const gameOverOverlay = document.getElementById('gameOverOverlay');
       const startButton = document.getElementById('startButton');
       const restartButton = document.getElementById('restartButton');
+      const shareButton = document.getElementById('shareButton');
       const finalScoreEl = document.getElementById('finalScore');
       const bestScoreEl = document.getElementById('bestScore');
       const overTitle = document.getElementById('overTitle');
@@ -528,6 +543,8 @@
       owlSprite.src = 'math-owl.png';
       let wingFlapStartedAt = -Infinity;
       let sceneryDistance = 0;
+      let shareCard = null;
+      let shareButtonTimer = null;
 
       let W = 640;
       let H = 820;
@@ -732,7 +749,12 @@
         state = 'over';
         screenFlash = 0.28;
         tone(185, 0.28, 0.07, 'sawtooth');
+        const isNewBest = score > best;
         best = Math.max(best, score);
+        // Draw the share image now: iOS only opens the share sheet right after a tap,
+        // so it must be ready before the player presses Share.
+        shareCard = makeShareCard(score, best, isNewBest);
+        resetShareButton();
         saveBest();
         finalScoreEl.textContent = String(score);
         bestScoreEl.textContent = String(best);
@@ -748,6 +770,179 @@
         const finishedRun = activeRunPromise;
         showLeaderboardStatus('Saving your score…');
         void submitScore(score, finishedRun);
+      }
+
+      // 1080×1080 score card in the night-city style, returned as a PNG blob.
+      function makeShareCard(finalScore, bestScore, isNewBest) {
+        const size = 1080;
+        const card = document.createElement('canvas');
+        card.width = size;
+        card.height = size;
+        const c = card.getContext('2d');
+        const font = (weight, px) => `${weight} ${px}px ui-rounded, "Nunito", "Avenir Next", system-ui, sans-serif`;
+
+        const sky = c.createLinearGradient(0, 0, 0, size);
+        sky.addColorStop(0, COLORS.skyTop);
+        sky.addColorStop(0.58, '#123b67');
+        sky.addColorStop(1, COLORS.skyBottom);
+        c.fillStyle = sky;
+        c.fillRect(0, 0, size, size);
+
+        c.fillStyle = 'rgba(255,231,168,.68)';
+        for (const [sx, sy, r] of [[.08,.06,3],[.3,.13,2],[.9,.09,3],[.72,.2,2],[.12,.36,2],[.94,.4,3],[.05,.62,2],[.95,.66,2]]) {
+          c.beginPath();
+          c.arc(sx * size, sy * size, r, 0, Math.PI * 2);
+          c.fill();
+        }
+
+        const heights = [.13,.1,.17,.12,.15,.09,.14,.18,.11,.16,.12,.14];
+        const unit = size / 11;
+        heights.forEach((h, i) => {
+          const top = size * (1 - h);
+          c.fillStyle = i % 2 ? '#102e50' : '#173f68';
+          c.fillRect(i * unit - unit * .2, top, unit * .95, size - top);
+          if (i % 3 !== 0) {
+            c.fillStyle = 'rgba(247,193,105,.37)';
+            c.fillRect(i * unit + unit * .15, top + 26, 8, 12);
+          }
+        });
+
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.font = font(1000, 104);
+        const skyWidth = c.measureText('SKY').width;
+        const logoWidth = skyWidth + c.measureText('SUM').width;
+        c.textAlign = 'left';
+        c.fillStyle = COLORS.cream;
+        c.fillText('SKY', (size - logoWidth) / 2, 110);
+        c.fillStyle = COLORS.yellow;
+        c.fillText('SUM', (size - logoWidth) / 2 + skyWidth, 110);
+        c.textAlign = 'center';
+
+        if (owlSprite.complete && owlSprite.naturalWidth) {
+          const w = 470;
+          const h = w * owlSprite.naturalHeight / owlSprite.naturalWidth;
+          c.drawImage(owlSprite, (size - w) / 2, 300 - h / 2, w, h);
+        }
+
+        const px = 200, py = 420, pw = 680, ph = 360;
+        c.fillStyle = COLORS.ink;
+        c.beginPath();
+        c.roundRect(px, py + 16, pw, ph, 48);
+        c.fill();
+        c.fillStyle = COLORS.cream;
+        c.beginPath();
+        c.roundRect(px, py, pw, ph, 48);
+        c.fill();
+        c.lineWidth = 10;
+        c.strokeStyle = COLORS.ink;
+        c.stroke();
+
+        c.fillStyle = COLORS.ink;
+        c.globalAlpha = 0.6;
+        c.font = font(900, 44);
+        c.fillText(finalScore === 1 ? 'SUM SOLVED' : 'SUMS SOLVED', size / 2, py + 70);
+        c.globalAlpha = 1;
+        c.font = font(1000, 190);
+        c.fillText(String(finalScore), size / 2, py + 190);
+        c.globalAlpha = 0.6;
+        c.font = font(900, 42);
+        c.fillText(`BEST ${bestScore}`, size / 2, py + 305);
+        c.globalAlpha = 1;
+
+        if (isNewBest && finalScore > 0) {
+          c.save();
+          c.translate(px + pw - 40, py + 10);
+          c.rotate(0.18);
+          c.fillStyle = COLORS.yellow;
+          c.beginPath();
+          c.roundRect(-130, -40, 260, 80, 24);
+          c.fill();
+          c.lineWidth = 8;
+          c.stroke();
+          c.fillStyle = COLORS.ink;
+          c.font = font(1000, 44);
+          c.fillText('NEW BEST!', 0, 3);
+          c.restore();
+        }
+
+        c.fillStyle = COLORS.cream;
+        c.font = font(1000, 64);
+        c.fillText('Can you beat me?', size / 2, 880);
+        c.fillStyle = COLORS.yellow;
+        c.font = font(900, 50);
+        c.fillText(shareHost(), size / 2, 955);
+
+        return new Promise((resolve, reject) => {
+          card.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Score card could not be drawn'))), 'image/png');
+        });
+      }
+
+      function shareHost() {
+        return location.host.replace(/^www\./, '');
+      }
+
+      function shareText(finalScore) {
+        const sums = finalScore === 1 ? 'sum' : 'sums';
+        return `I solved ${finalScore} ${sums} in SkySum 🦉 Can you beat me? ${location.origin}/`;
+      }
+
+      function resetShareButton() {
+        clearTimeout(shareButtonTimer);
+        shareButton.textContent = 'Share';
+      }
+
+      function flashShareButton(message) {
+        shareButton.textContent = message;
+        clearTimeout(shareButtonTimer);
+        shareButtonTimer = setTimeout(resetShareButton, 2200);
+      }
+
+      // Same fallback chain as flappybird.io: native share sheet with the image,
+      // then clipboard (image, then text), then download the image.
+      async function shareResult() {
+        const text = shareText(score);
+        let blob = null;
+        try { blob = await shareCard; } catch (_) { /* fall back to text */ }
+        const file = blob && new File([blob], 'skysum-score.png', { type: 'image/png' });
+
+        if (navigator.share) {
+          const payload = file && navigator.canShare?.({ files: [file] }) ? { files: [file], text } : { text };
+          try {
+            await navigator.share(payload);
+            return;
+          } catch (error) {
+            if (error?.name === 'AbortError') return;
+          }
+        }
+        if (blob && navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+          try {
+            await navigator.clipboard.write([new ClipboardItem({
+              'image/png': blob,
+              'text/plain': new Blob([text], { type: 'text/plain' })
+            })]);
+            flashShareButton('Copied!');
+            return;
+          } catch (_) { /* try text only */ }
+        }
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            flashShareButton('Copied!');
+            return;
+          } catch (_) { /* try download */ }
+        }
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = 'skysum-score.png';
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          flashShareButton('Saved!');
+          return;
+        }
+        flashShareButton("Can't share");
       }
 
       async function initializePlayer() {
@@ -1202,6 +1397,7 @@
 
       startButton.addEventListener('click', startGame);
       restartButton.addEventListener('click', startGame);
+      shareButton.addEventListener('click', () => { void shareResult(); });
       shell.addEventListener('pointerdown', handleGameInput);
       window.addEventListener('keydown', (event) => {
         if (event.code !== 'Space' && event.code !== 'ArrowUp') return;
