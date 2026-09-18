@@ -908,7 +908,16 @@
             return;
           }
           // The middle pipe separates the two openings, so the one entered is final.
-          if (gate.choice === null) gate.choice = safelyInTop ? gate.topAnswer : gate.bottomAnswer;
+          if (gate.choice === null) {
+            gate.choice = safelyInTop ? gate.topAnswer : gate.bottomAnswer;
+            if (gate.choice !== gate.question.answer) {
+              endGame('wrong', gate.choice);
+              return;
+            }
+            // Soft chime for the right opening; the exit sound still confirms a clean pass.
+            tone(880, 0.07, 0.04, 'sine');
+            tone(1320, 0.12, 0.035, 'sine', 0.06);
+          }
         }
 
         if (gate.choice === gate.question.answer && gate.nextQuestion === null && !gate.answered
