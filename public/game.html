@@ -547,7 +547,9 @@
       const bird = { x: 145, y: 390, vy: 0, radius: 18 };
       const gate = {
         x: 700, width: 82, topCenter: 265, bottomCenter: 545,
-        gap: 118, answered: false, question: null, topAnswer: 3, bottomAnswer: 4
+        gap: 118, answered: false, question: null, topAnswer: 3, bottomAnswer: 4,
+        // choice: the answer whose opening the owl entered. nextQuestion: shown early, once the owl is halfway through the right one.
+        choice: null, nextQuestion: null
       };
 
       function loadBest() {
@@ -631,8 +633,17 @@
         return { text, answer, wrong };
       }
 
+      function showEquation(question) {
+        equationEl.textContent = `${question.text} = ?`;
+        equationEl.classList.remove('pulse');
+        void equationEl.offsetWidth;
+        equationEl.classList.add('pulse');
+      }
+
       function placeQuestion() {
-        gate.question = makeQuestion(score);
+        const alreadyShown = gate.nextQuestion !== null;
+        gate.question = gate.nextQuestion ?? makeQuestion(score);
+        gate.nextQuestion = null;
         if (Math.random() < 0.5) {
           gate.topAnswer = gate.question.answer;
           gate.bottomAnswer = gate.question.wrong;
@@ -641,10 +652,8 @@
           gate.bottomAnswer = gate.question.answer;
         }
         gate.answered = false;
-        equationEl.textContent = `${gate.question.text} = ?`;
-        equationEl.classList.remove('pulse');
-        void equationEl.offsetWidth;
-        equationEl.classList.add('pulse');
+        gate.choice = null;
+        if (!alreadyShown) showEquation(gate.question);
         liveStatus.textContent = `Question: ${gate.question.text}. Choose ${gate.topAnswer} above or ${gate.bottomAnswer} below.`;
       }
 
@@ -659,6 +668,7 @@
         successText = 0;
         configureGateGeometry();
         gate.x = W + Math.max(100, W * 0.2);
+        gate.nextQuestion = null;
         placeQuestion();
       }
 
@@ -669,7 +679,7 @@
         state = 'playing';
         startOverlay.hidden = true;
         gameOverOverlay.hidden = true;
-        hintEl.textContent = 'Choose the correct answer';
+        hintEl.hidden = true;
         lastTime = performance.now();
         flap();
       }
@@ -897,11 +907,20 @@
             endGame('pipe');
             return;
           }
+          // The middle pipe separates the two openings, so the one entered is final.
+          if (gate.choice === null) gate.choice = safelyInTop ? gate.topAnswer : gate.bottomAnswer;
+        }
+
+        if (gate.choice === gate.question.answer && gate.nextQuestion === null && !gate.answered
+            && bird.x >= gate.x + gate.width / 2) {
+          // Same difficulty as before: the score goes up by one when the owl exits.
+          gate.nextQuestion = makeQuestion(score + 1);
+          showEquation(gate.nextQuestion);
         }
 
         if (!gate.answered && gate.x + gate.width < bird.x - bird.radius) {
-          const chosen = Math.abs(bird.y - gate.topCenter) < Math.abs(bird.y - gate.bottomCenter)
-            ? gate.topAnswer : gate.bottomAnswer;
+          const chosen = gate.choice ?? (Math.abs(bird.y - gate.topCenter) < Math.abs(bird.y - gate.bottomCenter)
+            ? gate.topAnswer : gate.bottomAnswer);
           if (chosen === gate.question.answer) correctAnswer();
           else endGame('wrong', chosen);
         }
@@ -965,17 +984,20 @@
           ctx.fill();
         }
 
-        drawAnswer(gate.topAnswer, gate.topCenter, gate.question?.answer === gate.topAnswer && successText > 0);
-        drawAnswer(gate.bottomAnswer, gate.bottomCenter, gate.question?.answer === gate.bottomAnswer && successText > 0);
+        drawAnswer(gate.topAnswer, gate.topCenter);
+        drawAnswer(gate.bottomAnswer, gate.bottomCenter);
       }
 
-      function drawAnswer(answer, centerY, isCorrect) {
+      function drawAnswer(answer, centerY) {
+        // The opening turns green or red the moment the owl enters it.
+        const entered = gate.choice !== null && gate.choice === answer;
+        const fill = !entered ? COLORS.cream : answer === gate.question?.answer ? COLORS.green : COLORS.red;
         const bubbleW = Math.max(72, gate.width + 12);
         const bubbleH = 54;
         const bx = gate.x + gate.width / 2 - bubbleW / 2;
         const by = centerY - bubbleH / 2;
         roundedRect(bx, by, bubbleW, bubbleH, 16);
-        ctx.fillStyle = isCorrect ? COLORS.green : COLORS.cream;
+        ctx.fillStyle = fill;
         ctx.fill();
         ctx.lineWidth = 4;
         ctx.strokeStyle = COLORS.ink;
