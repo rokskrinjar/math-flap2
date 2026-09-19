@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -18,10 +18,17 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
   },
-  icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+  // Icons come from app/icon.svg (browser tab) and app/apple-icon.tsx (iPhone home screen).
+  // Opened from the iPhone home screen: full screen, no Safari bar.
+  appleWebApp: {
+    capable: true,
+    title: "SkySum",
+    statusBarStyle: "black",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#071a3d",
 };
 
 export default function RootLayout({
