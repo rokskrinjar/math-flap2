@@ -392,6 +392,60 @@
       color: var(--white);
     }
 
+    .install-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 10px 10px 10px 14px;
+      border: 2px dashed rgba(7,26,61,.3);
+      border-radius: 16px;
+      text-align: left;
+    }
+
+    .install-row[hidden] { display: none; }
+
+    .install-button {
+      flex: 1;
+      min-height: 44px;
+      border: 2px solid var(--ink);
+      border-radius: 13px;
+      background: var(--white);
+      color: var(--ink);
+      font: inherit;
+      font-size: .95rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .card .install-hint {
+      flex: 1;
+      margin: 0;
+      max-width: none;
+      font-size: .88rem;
+      line-height: 1.4;
+      opacity: .85;
+    }
+
+    .install-hint svg {
+      width: 1.15em;
+      height: 1.15em;
+      vertical-align: -0.2em;
+    }
+
+    .install-dismiss {
+      flex: none;
+      width: 32px;
+      height: 32px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(7,26,61,.08);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
     .play-button:hover { filter: brightness(1.04); transform: translateY(-1px); }
     .play-button:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--ink); }
     .play-button:focus-visible, .icon-button:focus-visible { outline: 4px solid var(--blue); outline-offset: 3px; }
@@ -502,6 +556,15 @@
           <button class="play-button share-button" id="shareButton">Share</button>
           <button class="play-button" id="restartButton">Try again</button>
         </div>
+        <div class="install-row" id="installRow" hidden>
+          <button class="install-button" id="installButton" hidden>Install SkySum on your phone</button>
+          <p class="install-hint" id="installHint" hidden>
+            Play it like an app: tap
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H17"/></svg>
+            <strong>Share</strong> in your browser, then <strong>Add to Home Screen</strong>.
+          </p>
+          <button class="install-dismiss" id="installDismiss" aria-label="Don't show this again">✕</button>
+        </div>
       </div>
     </section>
 
@@ -523,6 +586,10 @@
       const startButton = document.getElementById('startButton');
       const restartButton = document.getElementById('restartButton');
       const shareButton = document.getElementById('shareButton');
+      const installRow = document.getElementById('installRow');
+      const installButton = document.getElementById('installButton');
+      const installHint = document.getElementById('installHint');
+      const installDismiss = document.getElementById('installDismiss');
       const finalScoreEl = document.getElementById('finalScore');
       const bestScoreEl = document.getElementById('bestScore');
       const overTitle = document.getElementById('overTitle');
@@ -755,6 +822,7 @@
         // so it must be ready before the player presses Share.
         shareCard = makeShareCard(score, best, isNewBest);
         resetShareButton();
+        updateInstallRow();
         saveBest();
         finalScoreEl.textContent = String(score);
         bestScoreEl.textContent = String(best);
@@ -943,6 +1011,56 @@
           return;
         }
         flashShareButton("Can't share");
+      }
+
+      // Home-screen install. Android Chrome lets the page open its install dialog; the event
+      // is caught by the parent page (app/layout.tsx) because the game runs in an iframe.
+      // iOS has no such API, so iPhones get instructions instead.
+      const INSTALL_DISMISSED_KEY = 'skySumInstallDismissed';
+      const installHost = (() => {
+        try { return window.parent.document ? window.parent : window; } catch (_) { return window; }
+      })();
+
+      function installPrompt() {
+        try { return installHost.__skysumInstallPrompt || null; } catch (_) { return null; }
+      }
+
+      function isInstalled() {
+        try {
+          return installHost.matchMedia('(display-mode: standalone)').matches
+            || installHost.navigator.standalone === true;
+        } catch (_) { return false; }
+      }
+
+      function isIos() {
+        const ua = navigator.userAgent;
+        return /iPhone|iPad|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+      }
+
+      function installDismissed() {
+        try { return localStorage.getItem(INSTALL_DISMISSED_KEY) === '1'; } catch (_) { return false; }
+      }
+
+      function updateInstallRow() {
+        const canPrompt = installPrompt() !== null && /Android/i.test(navigator.userAgent);
+        const showHint = !canPrompt && isIos();
+        installRow.hidden = isInstalled() || installDismissed() || !(canPrompt || showHint);
+        installButton.hidden = !canPrompt;
+        installHint.hidden = !showHint;
+      }
+
+      async function installApp() {
+        const prompt = installPrompt();
+        if (!prompt) return;
+        try { installHost.__skysumInstallPrompt = null; } catch (_) { /* nothing to clear */ }
+        prompt.prompt();
+        try { await prompt.userChoice; } catch (_) { /* dialog closed */ }
+        updateInstallRow();
+      }
+
+      function dismissInstall() {
+        try { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); } catch (_) { /* hide for this visit only */ }
+        updateInstallRow();
       }
 
       async function initializePlayer() {
@@ -1398,6 +1516,9 @@
       startButton.addEventListener('click', startGame);
       restartButton.addEventListener('click', startGame);
       shareButton.addEventListener('click', () => { void shareResult(); });
+      installButton.addEventListener('click', () => { void installApp(); });
+      installDismiss.addEventListener('click', dismissInstall);
+      try { installHost.addEventListener('skysum-install-change', updateInstallRow); } catch (_) { /* standalone page */ }
       shell.addEventListener('pointerdown', handleGameInput);
       window.addEventListener('keydown', (event) => {
         if (event.code !== 'Space' && event.code !== 'ArrowUp') return;

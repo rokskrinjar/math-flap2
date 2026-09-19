@@ -31,6 +31,19 @@ export const viewport: Viewport = {
   themeColor: "#071a3d",
 };
 
+// Chrome sends "beforeinstallprompt" to this top-level page, possibly before the game iframe
+// has loaded. Keep the event so game.html can offer its own Install button (Android).
+const captureInstallPrompt = `
+window.addEventListener("beforeinstallprompt", function (event) {
+  event.preventDefault();
+  window.__skysumInstallPrompt = event;
+  window.dispatchEvent(new Event("skysum-install-change"));
+});
+window.addEventListener("appinstalled", function () {
+  window.__skysumInstallPrompt = null;
+  window.dispatchEvent(new Event("skysum-install-change"));
+});`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -38,6 +51,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: captureInstallPrompt }} />
+      </head>
       <body className="antialiased">
         {children}
         <Analytics />
