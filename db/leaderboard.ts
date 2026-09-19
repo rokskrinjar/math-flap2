@@ -104,10 +104,9 @@ export function utcDayStart(now = Date.now()) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
-export async function getDailyLeaderboard(playerId: string) {
-  const dayStart = utcDayStart();
-  const dayEnd = dayStart + 86_400_000;
-  // DISTINCT ON keeps each player's best score today, and the earliest run that achieved it.
+// Top 10 for completed runs in [from, to), plus the player's own entry even outside the top 10.
+async function getLeaderboard(playerId: string, from: number, to: number) {
+  // DISTINCT ON keeps each player's best score in the window, and the earliest run that achieved it.
   const { rows } = await getDb().execute<{
     player_id: string;
     nickname: string;
@@ -118,7 +117,7 @@ export async function getDailyLeaderboard(playerId: string) {
       SELECT DISTINCT ON (r.player_id)
              r.player_id, r.score, r.completed_at AS achieved_at
       FROM runs r
-      WHERE r.completed_at >= ${dayStart} AND r.completed_at < ${dayEnd} AND r.score IS NOT NULL
+      WHERE r.completed_at >= ${from} AND r.completed_at < ${to} AND r.score IS NOT NULL
       ORDER BY r.player_id, r.score DESC, r.completed_at ASC
     ), ranked AS (
       SELECT b.player_id, p.nickname, b.score,
@@ -141,6 +140,17 @@ export async function getDailyLeaderboard(playerId: string) {
   return {
     entries: entries.filter((entry) => entry.rank <= 10),
     you: entries.find((entry) => entry.isYou) ?? null,
-    resetsAt: dayEnd,
   };
+}
+
+// Today's board (the original response shape) plus the all-time board under `allTime`,
+// so the game can switch tabs without another request.
+export async function getLeaderboards(playerId: string) {
+  const dayStart = utcDayStart();
+  const dayEnd = dayStart + 86_400_000;
+  const [today, allTime] = await Promise.all([
+    getLeaderboard(playerId, dayStart, dayEnd),
+    getLeaderboard(playerId, 0, Number.MAX_SAFE_INTEGER),
+  ]);
+  return { ...today, resetsAt: dayEnd, allTime };
 }

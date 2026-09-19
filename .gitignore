@@ -21,3 +21,6 @@ npm-debug.log*
 .pnpm-debug.log*
 
 .env*.local
+
+# local database backups
+/db-backups/

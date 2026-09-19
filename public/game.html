@@ -284,18 +284,41 @@
 
     .leaderboard-header {
       display: flex;
-      align-items: baseline;
+      flex-wrap: wrap;
+      align-items: center;
       justify-content: space-between;
-      gap: 10px;
+      gap: 6px 10px;
       padding: 10px 12px;
       border-bottom: 2px solid var(--ink);
       background: var(--yellow);
     }
 
-    .leaderboard-header strong {
-      font-size: .86rem;
-      letter-spacing: .04em;
+    .leaderboard-tabs {
+      flex: 1 1 100%;
+      display: flex;
+      gap: 4px;
+    }
+
+    .leaderboard-tab {
+      flex: 1;
+      min-width: 0;
+      padding: 3px 4px;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: .72rem;
+      font-weight: 900;
+      letter-spacing: .03em;
       text-transform: uppercase;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .leaderboard-tab[aria-selected="true"] {
+      background: var(--ink);
+      color: var(--yellow);
     }
 
     .leaderboard-header span {
@@ -313,7 +336,7 @@
 
     .leaderboard-row {
       display: grid;
-      grid-template-columns: 26px minmax(0, 1fr) auto;
+      grid-template-columns: minmax(26px, auto) minmax(0, 1fr) auto;
       align-items: center;
       gap: 7px;
       min-height: 23px;
@@ -328,12 +351,15 @@
     }
 
     .leaderboard-rank {
-      width: 21px;
+      /* A pill, so ranks like 127 still fit in the pinned "you" row. */
+      min-width: 21px;
       height: 21px;
+      padding-inline: 3px;
+      justify-self: center;
       display: grid;
       place-items: center;
       border: 1.5px solid currentColor;
-      border-radius: 50%;
+      border-radius: 999px;
       font-size: .67rem;
     }
 
@@ -500,6 +526,7 @@
       .game-over-grid { grid-template-columns: 96px minmax(0, 1fr); gap: 10px; }
       .leaderboard-row { padding-inline: 7px; font-size: .71rem; }
       .leaderboard-header { padding-inline: 9px; }
+      .leaderboard-tab { font-size: .6rem; letter-spacing: 0; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -542,9 +569,12 @@
             <div><small>Best</small><span id="bestScore">0</span></div>
             <span class="player-name" id="playerName">Assigning your name…</span>
           </div>
-          <section class="leaderboard" aria-labelledby="leaderboardTitle">
+          <section class="leaderboard" aria-label="Top 10 leaderboard">
             <div class="leaderboard-header">
-              <strong id="leaderboardTitle">Daily top 10</strong>
+              <div class="leaderboard-tabs" role="tablist" aria-label="Leaderboard period">
+                <button class="leaderboard-tab" id="tabToday" role="tab" aria-selected="true">Today</button>
+                <button class="leaderboard-tab" id="tabAllTime" role="tab" aria-selected="false">All time</button>
+              </div>
               <span id="leaderboardReset">UTC</span>
             </div>
             <ol class="leaderboard-list" id="leaderboardList">
@@ -599,6 +629,8 @@
       const playerNameEl = document.getElementById('playerName');
       const leaderboardList = document.getElementById('leaderboardList');
       const leaderboardReset = document.getElementById('leaderboardReset');
+      const tabToday = document.getElementById('tabToday');
+      const tabAllTime = document.getElementById('tabAllTime');
 
       const COLORS = {
         ink: '#071a3d', skyTop: '#0b1935', skyBottom: '#1b527c',
@@ -836,6 +868,7 @@
         liveStatus.textContent = `${overTitle.textContent} Score ${score}. Best ${best}.`;
         setTimeout(() => { gameOverOverlay.hidden = false; restartButton.focus(); }, 280);
         const finishedRun = activeRunPromise;
+        boardData = null;
         showLeaderboardStatus('Saving your score…');
         void submitScore(score, finishedRun);
       }
@@ -1127,16 +1160,44 @@
         return row;
       }
 
+      // Today / All time tabs. Both boards arrive in one response, so switching is instant.
+      const BOARD_TAB_KEY = 'skySumBoardTab';
+      let boardTab = loadBoardTab();
+      let boardData = null;
+
+      function loadBoardTab() {
+        try { return localStorage.getItem(BOARD_TAB_KEY) === 'allTime' ? 'allTime' : 'today'; }
+        catch (_) { return 'today'; }
+      }
+
+      function syncBoardTabs() {
+        tabToday.setAttribute('aria-selected', String(boardTab === 'today'));
+        tabAllTime.setAttribute('aria-selected', String(boardTab === 'allTime'));
+        leaderboardReset.hidden = boardTab !== 'today';
+      }
+
+      function selectBoardTab(tab) {
+        boardTab = tab;
+        try { localStorage.setItem(BOARD_TAB_KEY, tab); } catch (_) { /* remembered for this visit only */ }
+        syncBoardTabs();
+        if (boardData) renderLeaderboard(boardData);
+      }
+
       function renderLeaderboard(data) {
+        boardData = data;
         if (data.nickname) {
           playerNickname = data.nickname;
           playerNameEl.textContent = `You are ${playerNickname}`;
         }
+        syncBoardTabs();
         leaderboardReset.textContent = resetCountdown(data.resetsAt);
-        const rows = Array.isArray(data.entries) ? [...data.entries] : [];
-        if (data.you && !rows.some((entry) => entry.isYou)) rows.push(data.you);
+        const board = boardTab === 'allTime' ? (data.allTime ?? { entries: [], you: null }) : data;
+        const rows = Array.isArray(board.entries) ? [...board.entries] : [];
+        if (board.you && !rows.some((entry) => entry.isYou)) rows.push(board.you);
         if (!rows.length) {
-          showLeaderboardStatus('Be the first player on today’s board!');
+          showLeaderboardStatus(boardTab === 'allTime'
+            ? 'Be the first player on the all-time board!'
+            : 'Be the first player on today’s board!');
           return;
         }
         leaderboardList.replaceChildren(...rows.map(makeLeaderboardRow));
@@ -1517,6 +1578,9 @@
       restartButton.addEventListener('click', startGame);
       shareButton.addEventListener('click', () => { void shareResult(); });
       installButton.addEventListener('click', () => { void installApp(); });
+      tabToday.addEventListener('click', () => selectBoardTab('today'));
+      tabAllTime.addEventListener('click', () => selectBoardTab('allTime'));
+      syncBoardTabs();
       installDismiss.addEventListener('click', dismissInstall);
       try { installHost.addEventListener('skysum-install-change', updateInstallRow); } catch (_) { /* standalone page */ }
       shell.addEventListener('pointerdown', handleGameInput);

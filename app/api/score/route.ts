@@ -1,6 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db";
-import { getDailyLeaderboard, getOrCreatePlayer, jsonForPlayer } from "@/db/leaderboard";
+import { getLeaderboards, getOrCreatePlayer, jsonForPlayer } from "@/db/leaderboard";
 import { runs } from "@/db/schema";
 
 export async function POST(request: Request) {
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       return jsonForPlayer(player, { error: "This run was already submitted." }, 409);
     }
 
-    const leaderboard = await getDailyLeaderboard(player.id);
+    const leaderboard = await getLeaderboards(player.id);
     return jsonForPlayer(player, { nickname: player.nickname, ...leaderboard });
   } catch (error) {
     console.error("score submission failed", error);
